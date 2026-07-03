@@ -52,7 +52,11 @@ class DashboardService
                 ->toArray();
         }, []);
 
-        return compact('monthlyRevenue', 'ordersByStatus', 'topProducts');
+        return [
+            'monthly_revenue'  => $monthlyRevenue,
+            'orders_by_status' => $ordersByStatus,
+            'top_products'     => $topProducts,
+        ];
     }
 
     private function safe(callable $fn, mixed $default = 0): mixed

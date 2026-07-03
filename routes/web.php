@@ -64,6 +64,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('/', [\App\Http\Controllers\CategoryController::class, 'index'])->name('index');
         Route::get('/create', [\App\Http\Controllers\CategoryController::class, 'create'])->name('create')->middleware('can:categories.create');
         Route::post('/', [\App\Http\Controllers\CategoryController::class, 'store'])->name('store')->middleware('can:categories.create');
+        Route::get('/{category}', [\App\Http\Controllers\CategoryController::class, 'show'])->name('show');
         Route::get('/{category}/edit', [\App\Http\Controllers\CategoryController::class, 'edit'])->name('edit')->middleware('can:categories.edit');
         Route::patch('/{category}', [\App\Http\Controllers\CategoryController::class, 'update'])->name('update')->middleware('can:categories.edit');
         Route::delete('/{category}', [\App\Http\Controllers\CategoryController::class, 'destroy'])->name('destroy')->middleware('can:categories.delete');
@@ -72,10 +73,13 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // Inventory
     Route::prefix('inventory')->name('inventory.')->middleware('can:inventory.view')->group(function () {
         Route::get('/', [\App\Http\Controllers\InventoryController::class, 'index'])->name('index');
+        Route::get('/movements', [\App\Http\Controllers\InventoryController::class, 'movements'])->name('movements');
         Route::get('/{product}', [\App\Http\Controllers\InventoryController::class, 'show'])->name('show');
         Route::post('/{product}/adjust', [\App\Http\Controllers\InventoryController::class, 'adjust'])->name('adjust')->middleware('can:inventory.adjust');
-        Route::get('/movements', [\App\Http\Controllers\InventoryController::class, 'movements'])->name('movements');
     });
+
+    // Products restore
+    Route::post('/products/{id}/restore', [\App\Http\Controllers\ProductController::class, 'restore'])->name('products.restore')->middleware(['auth', 'verified']);
 
     // Orders
     Route::prefix('orders')->name('orders.')->middleware('can:orders.view')->group(function () {

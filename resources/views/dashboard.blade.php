@@ -77,9 +77,9 @@
     </div>
 
     @push('scripts')
-    <script type="module">
-        import Chart from '/build/assets/chart.js';
-
+    <script defer>
+        document.addEventListener('DOMContentLoaded', function () {
+        const Chart = window.Chart;
         const monthlyData = @json($charts['monthly_revenue']);
         const ordersData  = @json($charts['orders_by_status']);
         const topProducts = @json($charts['top_products']);
@@ -132,6 +132,7 @@
                 scales: { y: { beginAtZero: true } }
             }
         });
+        }); // DOMContentLoaded
     </script>
     @endpush
 </x-app-layout>
