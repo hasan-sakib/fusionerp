@@ -2,10 +2,12 @@
 
 namespace App\Providers;
 
+use App\Policies\RolePolicy;
 use Illuminate\Pagination\Paginator;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Validation\Rules\Password;
+use Spatie\Permission\Models\Role;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -26,6 +28,9 @@ class AppServiceProvider extends ServiceProvider
 
             return app()->isProduction() ? $rule->uncompromised() : $rule;
         });
+
+        // Spatie's Role model lives outside App\Models, so auto-discovery won't find this policy
+        Gate::policy(Role::class, RolePolicy::class);
 
         // Admin bypasses all Gates — checked before any policy
         Gate::before(function ($user, string $_ability) {
