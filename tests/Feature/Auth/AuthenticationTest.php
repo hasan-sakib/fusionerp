@@ -10,45 +10,108 @@ class AuthenticationTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_login_screen_can_be_rendered(): void
+    public function test_login_page_is_rendered(): void
     {
-        $response = $this->get('/login');
-
-        $response->assertStatus(200);
+        $this->get('/login')->assertStatus(200);
     }
 
-    public function test_users_can_authenticate_using_the_login_screen(): void
+    public function test_active_user_can_login(): void
     {
-        $user = User::factory()->create();
+        $user = User::factory()->create(['status' => 'active']);
 
-        $response = $this->post('/login', [
-            'email' => $user->email,
-            'password' => 'password',
-        ]);
+        $this->post('/login', ['email' => $user->email, 'password' => 'password'])
+             ->assertRedirect(route('dashboard'));
 
         $this->assertAuthenticated();
-        $response->assertRedirect(route('dashboard', absolute: false));
     }
 
-    public function test_users_can_not_authenticate_with_invalid_password(): void
+    public function test_last_login_at_is_recorded_on_login(): void
+    {
+        $user = User::factory()->create(['status' => 'active']);
+
+        $this->assertNull($user->last_login_at);
+
+        $this->post('/login', ['email' => $user->email, 'password' => 'password']);
+
+        $this->assertNotNull($user->fresh()->last_login_at);
+    }
+
+    public function test_login_fails_with_wrong_password(): void
     {
         $user = User::factory()->create();
 
-        $this->post('/login', [
-            'email' => $user->email,
-            'password' => 'wrong-password',
+        $this->post('/login', ['email' => $user->email, 'password' => 'wrong']);
+
+        $this->assertGuest();
+    }
+
+    public function test_inactive_user_cannot_login(): void
+    {
+        $user = User::factory()->inactive()->create();
+
+        $this->post('/login', ['email' => $user->email, 'password' => 'password'])
+             ->assertSessionHasErrors('email');
+
+        $this->assertGuest();
+    }
+
+    public function test_suspended_user_cannot_login(): void
+    {
+        $user = User::factory()->suspended()->create();
+
+        $this->post('/login', ['email' => $user->email, 'password' => 'password'])
+             ->assertSessionHasErrors('email');
+
+        $this->assertGuest();
+    }
+
+    public function test_login_is_rate_limited_after_five_attempts(): void
+    {
+        $user = User::factory()->create();
+
+        // Exhaust the 5 attempts
+        foreach (range(0, 4) as $_) {
+            $this->post('/login', ['email' => $user->email, 'password' => 'wrong']);
+        }
+
+        $this->post('/login', ['email' => $user->email, 'password' => 'wrong'])
+             ->assertSessionHasErrors('email');
+    }
+
+    public function test_authenticated_user_is_redirected_from_login(): void
+    {
+        $user = User::factory()->create();
+
+        $this->actingAs($user)->get('/login')->assertRedirect(route('dashboard'));
+    }
+
+    public function test_user_can_logout(): void
+    {
+        $user = User::factory()->create();
+
+        $this->actingAs($user)->post('/logout');
+
+        $this->assertGuest();
+    }
+
+    public function test_logout_redirects_to_login(): void
+    {
+        $user = User::factory()->create();
+
+        $this->actingAs($user)->post('/logout')
+             ->assertRedirect(route('login'));
+    }
+
+    public function test_remember_me_sets_cookie(): void
+    {
+        $user = User::factory()->create(['status' => 'active']);
+
+        $response = $this->post('/login', [
+            'email'    => $user->email,
+            'password' => 'password',
+            'remember' => '1',
         ]);
 
-        $this->assertGuest();
-    }
-
-    public function test_users_can_logout(): void
-    {
-        $user = User::factory()->create();
-
-        $response = $this->actingAs($user)->post('/logout');
-
-        $this->assertGuest();
-        $response->assertRedirect('/');
+        $response->assertCookie(auth()->guard()->getRecallerName());
     }
 }

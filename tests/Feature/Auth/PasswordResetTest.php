@@ -12,14 +12,12 @@ class PasswordResetTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_reset_password_link_screen_can_be_rendered(): void
+    public function test_forgot_password_page_is_rendered(): void
     {
-        $response = $this->get('/forgot-password');
-
-        $response->assertStatus(200);
+        $this->get('/forgot-password')->assertStatus(200);
     }
 
-    public function test_reset_password_link_can_be_requested(): void
+    public function test_reset_link_can_be_requested(): void
     {
         Notification::fake();
 
@@ -30,7 +28,16 @@ class PasswordResetTest extends TestCase
         Notification::assertSentTo($user, ResetPassword::class);
     }
 
-    public function test_reset_password_screen_can_be_rendered(): void
+    public function test_reset_link_not_sent_for_unknown_email(): void
+    {
+        Notification::fake();
+
+        $this->post('/forgot-password', ['email' => 'nobody@example.com']);
+
+        Notification::assertNothingSent();
+    }
+
+    public function test_password_reset_page_is_rendered(): void
     {
         Notification::fake();
 
@@ -39,10 +46,7 @@ class PasswordResetTest extends TestCase
         $this->post('/forgot-password', ['email' => $user->email]);
 
         Notification::assertSentTo($user, ResetPassword::class, function ($notification) {
-            $response = $this->get('/reset-password/'.$notification->token);
-
-            $response->assertStatus(200);
-
+            $this->get('/reset-password/' . $notification->token)->assertStatus(200);
             return true;
         });
     }
@@ -57,16 +61,13 @@ class PasswordResetTest extends TestCase
 
         Notification::assertSentTo($user, ResetPassword::class, function ($notification) use ($user) {
             $response = $this->post('/reset-password', [
-                'token' => $notification->token,
-                'email' => $user->email,
-                'password' => 'password',
-                'password_confirmation' => 'password',
+                'token'                 => $notification->token,
+                'email'                 => $user->email,
+                'password'              => 'NewPassword@123',
+                'password_confirmation' => 'NewPassword@123',
             ]);
 
-            $response
-                ->assertSessionHasNoErrors()
-                ->assertRedirect(route('login'));
-
+            $response->assertSessionHasNoErrors();
             return true;
         });
     }

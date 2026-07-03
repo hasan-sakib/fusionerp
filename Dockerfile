@@ -2,13 +2,16 @@ FROM php:8.4-fpm-alpine
 
 # System dependencies
 RUN apk add --no-cache \
+    autoconf \
     bash \
     curl \
+    g++ \
     git \
     libpng-dev \
     libjpeg-turbo-dev \
     libwebp-dev \
     freetype-dev \
+    make \
     oniguruma-dev \
     libxml2-dev \
     zip \
@@ -55,6 +58,9 @@ RUN composer install --optimize-autoloader --no-dev 2>/dev/null || true
 
 # Install Node dependencies and build assets
 RUN npm ci && npm run build 2>/dev/null || true
+
+# Create log directories
+RUN mkdir -p /var/log/supervisor /var/log/php
 
 # Storage permissions
 RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache 2>/dev/null || true
