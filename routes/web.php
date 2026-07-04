@@ -90,7 +90,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('/{order}/edit', [\App\Http\Controllers\OrderController::class, 'edit'])->name('edit')->middleware('can:orders.edit');
         Route::patch('/{order}', [\App\Http\Controllers\OrderController::class, 'update'])->name('update')->middleware('can:orders.edit');
         Route::delete('/{order}', [\App\Http\Controllers\OrderController::class, 'destroy'])->name('destroy')->middleware('can:orders.delete');
-        Route::patch('/{order}/status', [\App\Http\Controllers\OrderController::class, 'updateStatus'])->name('status')->middleware('can:orders.process');
+        Route::patch('/{order}/status', [\App\Http\Controllers\OrderController::class, 'updateStatus'])->name('status');
     });
 
     // Reports
