@@ -11,6 +11,7 @@ RUN apk add --no-cache \
     libjpeg-turbo-dev \
     libwebp-dev \
     freetype-dev \
+    libzip-dev \
     make \
     oniguruma-dev \
     libxml2-dev \
@@ -33,6 +34,7 @@ RUN docker-php-ext-configure gd \
         bcmath \
         gd \
         xml \
+        zip \
         opcache
 
 # Install Redis extension
