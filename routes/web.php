@@ -11,8 +11,14 @@ Route::get('/', function () {
         : redirect()->route('login');
 });
 
-// ─── Authenticated & Verified Routes ─────────────────────────────────────────
-Route::middleware(['auth', 'verified'])->group(function () {
+// ─── Platform Super-Admin Routes (no tenant context) ─────────────────────────
+Route::prefix('admin')->name('admin.')->middleware(['auth', 'platform.admin'])->group(function () {
+    Route::get('/', fn () => redirect()->route('admin.tenants.index'));
+    Route::resource('tenants', \App\Http\Controllers\Admin\TenantController::class);
+});
+
+// ─── Tenant-Scoped Authenticated Routes ──────────────────────────────────────
+Route::middleware(['tenant', 'tenant.active', 'auth', 'verified'])->group(function () {
 
     // Dashboard
     Route::get('/dashboard', DashboardController::class)->name('dashboard');
@@ -22,7 +28,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 
-    // ── Module routes (each module appended as built) ─────────────────────────
+    // ── Module routes ─────────────────────────────────────────────────────────
 
     // Users
     Route::prefix('users')->name('users.')->middleware('can:users.view')->group(function () {
@@ -59,6 +65,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::delete('/{product}', [\App\Http\Controllers\ProductController::class, 'destroy'])->name('destroy')->middleware('can:products.delete');
     });
 
+    // Products restore
+    Route::post('/products/{id}/restore', [\App\Http\Controllers\ProductController::class, 'restore'])->name('products.restore');
+
     // Categories
     Route::prefix('categories')->name('categories.')->middleware('can:categories.view')->group(function () {
         Route::get('/', [\App\Http\Controllers\CategoryController::class, 'index'])->name('index');
@@ -77,9 +86,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('/{product}', [\App\Http\Controllers\InventoryController::class, 'show'])->name('show');
         Route::post('/{product}/adjust', [\App\Http\Controllers\InventoryController::class, 'adjust'])->name('adjust')->middleware('can:inventory.adjust');
     });
-
-    // Products restore
-    Route::post('/products/{id}/restore', [\App\Http\Controllers\ProductController::class, 'restore'])->name('products.restore')->middleware(['auth', 'verified']);
 
     // Orders
     Route::prefix('orders')->name('orders.')->middleware('can:orders.view')->group(function () {

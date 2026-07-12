@@ -11,7 +11,11 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        //
+        $middleware->alias([
+            'tenant'         => \App\Http\Middleware\ResolveTenant::class,
+            'tenant.active'  => \App\Http\Middleware\EnsureTenantIsActive::class,
+            'platform.admin' => \App\Http\Middleware\EnsurePlatformAdmin::class,
+        ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //

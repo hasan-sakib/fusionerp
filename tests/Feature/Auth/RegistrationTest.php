@@ -18,6 +18,8 @@ class RegistrationTest extends TestCase
         parent::setUp();
         // Roles must exist before any registration can assign one
         $this->seed(RolesAndPermissionsSeeder::class);
+        // Clear any stale tenant binding from a prior test in this process
+        $this->app->forgetInstance('tenant');
     }
 
     public function test_registration_page_is_rendered(): void
@@ -28,6 +30,7 @@ class RegistrationTest extends TestCase
     public function test_new_user_can_register(): void
     {
         $response = $this->post('/register', [
+            'company_name'          => 'Acme Corp',
             'name'                  => 'Test User',
             'email'                 => 'test@example.com',
             'password'              => 'Password@123',
@@ -38,10 +41,11 @@ class RegistrationTest extends TestCase
         $response->assertRedirect(route('dashboard'));
     }
 
-    public function test_registered_user_has_employee_role(): void
+    public function test_registered_user_has_admin_role(): void
     {
         $this->post('/register', [
-            'name'                  => 'Jane Employee',
+            'company_name'          => 'Jane Corp',
+            'name'                  => 'Jane Admin',
             'email'                 => 'jane@example.com',
             'password'              => 'Password@123',
             'password_confirmation' => 'Password@123',
@@ -49,7 +53,7 @@ class RegistrationTest extends TestCase
 
         $user = User::where('email', 'jane@example.com')->firstOrFail();
 
-        $this->assertTrue($user->hasRole('employee'));
+        $this->assertTrue($user->hasRole('admin'));
     }
 
     public function test_registration_fires_registered_event(): void
@@ -57,6 +61,7 @@ class RegistrationTest extends TestCase
         Event::fake([Registered::class]);
 
         $this->post('/register', [
+            'company_name'          => 'Event Corp',
             'name'                  => 'Event User',
             'email'                 => 'event@example.com',
             'password'              => 'Password@123',
@@ -69,6 +74,7 @@ class RegistrationTest extends TestCase
     public function test_registration_requires_strong_password(): void
     {
         $this->post('/register', [
+            'company_name'          => 'Weak Corp',
             'name'                  => 'Weak',
             'email'                 => 'weak@example.com',
             'password'              => 'password',
@@ -80,9 +86,21 @@ class RegistrationTest extends TestCase
 
     public function test_registration_requires_unique_email(): void
     {
-        User::factory()->create(['email' => 'taken@example.com']);
-
+        // Register first to claim the email
         $this->post('/register', [
+            'company_name'          => 'First Corp',
+            'name'                  => 'First User',
+            'email'                 => 'taken@example.com',
+            'password'              => 'Password@123',
+            'password_confirmation' => 'Password@123',
+        ]);
+
+        // Log out so the guest middleware allows a second registration attempt
+        auth()->logout();
+
+        // Attempt duplicate registration — unique:users is a global check, not tenant-scoped
+        $this->post('/register', [
+            'company_name'          => 'Second Corp',
             'name'                  => 'Duplicate',
             'email'                 => 'taken@example.com',
             'password'              => 'Password@123',
@@ -93,10 +111,23 @@ class RegistrationTest extends TestCase
     public function test_registration_requires_password_confirmation(): void
     {
         $this->post('/register', [
+            'company_name'          => 'No Confirm Corp',
             'name'                  => 'NoConfirm',
             'email'                 => 'noconfirm@example.com',
             'password'              => 'Password@123',
             'password_confirmation' => 'DifferentPassword@123',
         ])->assertSessionHasErrors('password');
+    }
+
+    public function test_registration_requires_company_name(): void
+    {
+        $this->post('/register', [
+            'name'                  => 'No Company',
+            'email'                 => 'nocompany@example.com',
+            'password'              => 'Password@123',
+            'password_confirmation' => 'Password@123',
+        ])->assertSessionHasErrors('company_name');
+
+        $this->assertGuest();
     }
 }

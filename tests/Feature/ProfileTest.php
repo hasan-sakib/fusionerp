@@ -1,8 +1,12 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tests\Feature;
 
+use App\Models\Tenant;
 use App\Models\User;
+use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
@@ -11,6 +15,18 @@ use Tests\TestCase;
 class ProfileTest extends TestCase
 {
     use RefreshDatabase;
+
+    private Tenant $tenant;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $this->seed(RolesAndPermissionsSeeder::class);
+
+        $this->tenant = Tenant::factory()->create(['slug' => 'test', 'status' => 'active']);
+        app()->instance('tenant', $this->tenant);
+    }
 
     public function test_profile_page_is_rendered(): void
     {

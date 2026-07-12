@@ -41,11 +41,20 @@ class AppServiceProvider extends ServiceProvider
         Gate::policy(Category::class, CategoryPolicy::class);
         Gate::policy(Order::class, OrderPolicy::class);
 
-        // Admin bypasses all Gates — checked before any policy
+        // Admin bypasses all Gates — scoped to the current tenant to prevent cross-tenant escalation
         Gate::before(function ($user, string $_ability) {
             if ($user->hasRole('admin')) {
-                return true;
+                // Outside tenant context (e.g. platform admin panel): no bypass
+                if (! app()->has('tenant')) {
+                    return null;
+                }
+                // Only bypass when the user belongs to the resolved tenant
+                if ($user->tenant_id === app('tenant')->id) {
+                    return true;
+                }
             }
+
+            return null;
         });
     }
 }

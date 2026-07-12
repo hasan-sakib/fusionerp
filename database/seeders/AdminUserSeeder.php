@@ -1,7 +1,10 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Database\Seeders;
 
+use App\Models\Tenant;
 use App\Models\User;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
@@ -10,9 +13,23 @@ class AdminUserSeeder extends Seeder
 {
     public function run(): void
     {
-        $admin = User::firstOrCreate(
+        // Create or find demo tenant
+        $tenant = Tenant::firstOrCreate(
+            ['slug' => 'demo'],
+            [
+                'name'   => 'FusionERP Demo',
+                'status' => 'active',
+                'plan'   => 'enterprise',
+            ]
+        );
+
+        // Bind tenant so BelongsToTenant auto-sets tenant_id
+        app()->instance('tenant', $tenant);
+
+        $admin = User::withoutGlobalScopes()->updateOrCreate(
             ['email' => 'admin@fusionerp.com'],
             [
+                'tenant_id'         => $tenant->id,
                 'name'              => 'System Administrator',
                 'phone'             => '+1-000-000-0000',
                 'department'        => 'IT',
@@ -24,9 +41,10 @@ class AdminUserSeeder extends Seeder
         );
         $admin->assignRole('admin');
 
-        $manager = User::firstOrCreate(
+        $manager = User::withoutGlobalScopes()->updateOrCreate(
             ['email' => 'manager@fusionerp.com'],
             [
+                'tenant_id'         => $tenant->id,
                 'name'              => 'Jane Manager',
                 'phone'             => '+1-000-000-0001',
                 'department'        => 'Operations',
@@ -38,9 +56,10 @@ class AdminUserSeeder extends Seeder
         );
         $manager->assignRole('manager');
 
-        $employee = User::firstOrCreate(
+        $employee = User::withoutGlobalScopes()->updateOrCreate(
             ['email' => 'employee@fusionerp.com'],
             [
+                'tenant_id'         => $tenant->id,
                 'name'              => 'John Employee',
                 'phone'             => '+1-000-000-0002',
                 'department'        => 'Sales',

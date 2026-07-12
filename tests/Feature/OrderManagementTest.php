@@ -6,6 +6,7 @@ namespace Tests\Feature;
 
 use App\Models\Order;
 use App\Models\Product;
+use App\Models\Tenant;
 use App\Models\User;
 use App\Services\OrderService;
 use Database\Seeders\RolesAndPermissionsSeeder;
@@ -19,6 +20,7 @@ class OrderManagementTest extends TestCase
     private User $admin;
     private User $manager;
     private User $employee;
+    private Tenant $tenant;
     private OrderService $orderService;
 
     protected function setUp(): void
@@ -26,6 +28,9 @@ class OrderManagementTest extends TestCase
         parent::setUp();
 
         $this->seed(RolesAndPermissionsSeeder::class);
+
+        $this->tenant = Tenant::factory()->create(['slug' => 'test', 'status' => 'active']);
+        app()->instance('tenant', $this->tenant);
 
         $this->admin = User::factory()->create();
         $this->admin->assignRole('admin');

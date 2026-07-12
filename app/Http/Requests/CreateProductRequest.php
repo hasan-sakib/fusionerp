@@ -19,7 +19,7 @@ class CreateProductRequest extends FormRequest
         return [
             'name'            => ['required', 'string', 'max:255'],
             'category_id'     => ['nullable', 'integer', 'exists:categories,id'],
-            'sku'             => ['nullable', 'string', 'max:100', 'unique:products,sku'],
+            'sku'             => ['nullable', 'string', 'max:100', Rule::unique('products', 'sku')->where('tenant_id', tenantId())],
             'barcode'         => ['nullable', 'string', 'max:100'],
             'description'     => ['nullable', 'string'],
             'price'           => ['required', 'numeric', 'min:0', 'max:9999999.99'],

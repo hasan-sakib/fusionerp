@@ -8,6 +8,7 @@ use App\Enums\OrderStatus;
 use App\Models\Category;
 use App\Models\Order;
 use App\Models\Product;
+use App\Models\Tenant;
 use App\Models\User;
 use App\Services\OrderService;
 use App\Services\ReportService;
@@ -22,6 +23,7 @@ class ReportingTest extends TestCase
     private User $admin;
     private User $manager;
     private User $employee;
+    private Tenant $tenant;
     private OrderService $orderService;
     private ReportService $reportService;
 
@@ -30,6 +32,9 @@ class ReportingTest extends TestCase
         parent::setUp();
 
         $this->seed(RolesAndPermissionsSeeder::class);
+
+        $this->tenant = Tenant::factory()->create(['slug' => 'test', 'status' => 'active']);
+        app()->instance('tenant', $this->tenant);
 
         $this->admin = User::factory()->create();
         $this->admin->assignRole('admin');

@@ -7,6 +7,19 @@
     <form method="POST" action="{{ route('register') }}" class="space-y-5">
         @csrf
 
+        {{-- Company Name --}}
+        <div>
+            <label for="company_name" class="form-label">Company name</label>
+            <input id="company_name" type="text" name="company_name"
+                   value="{{ old('company_name') }}"
+                   class="form-input @error('company_name') border-red-400 @enderror"
+                   required autofocus autocomplete="organization"
+                   placeholder="Acme Corp" />
+            @error('company_name')
+                <p class="form-error">{{ $message }}</p>
+            @enderror
+        </div>
+
         {{-- Name --}}
         <div>
             <label for="name" class="form-label">Full name</label>

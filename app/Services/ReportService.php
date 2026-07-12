@@ -10,6 +10,13 @@ use Illuminate\Support\Facades\DB;
 
 class ReportService
 {
+    private readonly ?int $tenantId;
+
+    public function __construct()
+    {
+        $this->tenantId = app()->has('tenant') ? app('tenant')->id : null;
+    }
+
     // -------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------
@@ -29,13 +36,14 @@ class ReportService
 
     public function getOverviewStats(): array
     {
-        $thisMonth    = now()->startOfMonth();
+        $thisMonth      = now()->startOfMonth();
         $lastMonthStart = now()->subMonth()->startOfMonth();
         $lastMonthEnd   = now()->subMonth()->endOfMonth();
 
         $revenue = DB::table('orders')
             ->whereNull('deleted_at')
             ->where('status', 'completed')
+            ->when($this->tenantId, fn ($q) => $q->where('tenant_id', $this->tenantId))
             ->selectRaw(
                 'SUM(total_amount) as total,
                  SUM(CASE WHEN created_at >= ? THEN total_amount ELSE 0 END) as this_month,
@@ -46,6 +54,7 @@ class ReportService
 
         $orders = DB::table('orders')
             ->whereNull('deleted_at')
+            ->when($this->tenantId, fn ($q) => $q->where('tenant_id', $this->tenantId))
             ->selectRaw(
                 'COUNT(*) as total,
                  SUM(CASE WHEN created_at >= ? THEN 1 ELSE 0 END) as this_month,
@@ -59,6 +68,7 @@ class ReportService
 
         $products = DB::table('products')
             ->whereNull('deleted_at')
+            ->when($this->tenantId, fn ($q) => $q->where('tenant_id', $this->tenantId))
             ->selectRaw(
                 'COUNT(*) as total,
                  SUM(CASE WHEN stock_quantity <= 0 THEN 1 ELSE 0 END) as out_of_stock,
@@ -66,6 +76,11 @@ class ReportService
                  SUM(stock_quantity * price) as stock_value'
             )
             ->first();
+
+        $usersQuery = DB::table('users')->whereNull('deleted_at');
+        if ($this->tenantId) {
+            $usersQuery->where('tenant_id', $this->tenantId);
+        }
 
         return [
             'revenue' => [
@@ -90,7 +105,7 @@ class ReportService
                 'stock_value' => (float) ($products->stock_value ?? 0),
             ],
             'users' => [
-                'total' => DB::table('users')->whereNull('deleted_at')->count(),
+                'total' => $usersQuery->count(),
             ],
         ];
     }
@@ -103,13 +118,13 @@ class ReportService
             ->whereNull('deleted_at')
             ->where('status', 'completed')
             ->where('created_at', '>=', $from)
-            ->selectRaw($this->periodFormat('created_at', '%Y-%m') . " as period, SUM(total_amount) as revenue, COUNT(*) as count")
+            ->when($this->tenantId, fn ($q) => $q->where('tenant_id', $this->tenantId))
+            ->selectRaw($this->periodFormat('created_at', '%Y-%m') . ' as period, SUM(total_amount) as revenue, COUNT(*) as count')
             ->groupBy('period')
             ->orderBy('period')
             ->get()
             ->keyBy('period');
 
-        // Fill every month in range, even months with no data
         $periods = [];
         for ($i = $months - 1; $i >= 0; $i--) {
             $key = now()->subMonths($i)->format('Y-m');
@@ -128,6 +143,7 @@ class ReportService
     {
         return DB::table('orders')
             ->whereNull('deleted_at')
+            ->when($this->tenantId, fn ($q) => $q->where('tenant_id', $this->tenantId))
             ->selectRaw('status, COUNT(*) as count')
             ->groupBy('status')
             ->get()
@@ -141,6 +157,7 @@ class ReportService
             ->join('orders', 'orders.id', '=', 'order_items.order_id')
             ->whereNull('orders.deleted_at')
             ->where('orders.status', 'completed')
+            ->when($this->tenantId, fn ($q) => $q->where('orders.tenant_id', $this->tenantId))
             ->selectRaw('order_items.product_name, SUM(order_items.total_price) as revenue, SUM(order_items.quantity) as units_sold')
             ->groupBy('order_items.product_id', 'order_items.product_name')
             ->orderByDesc('revenue')
@@ -153,6 +170,7 @@ class ReportService
         return DB::table('orders')
             ->whereNull('deleted_at')
             ->whereBetween('created_at', [$from->startOfDay(), $to->copy()->endOfDay()])
+            ->when($this->tenantId, fn ($q) => $q->where('tenant_id', $this->tenantId))
             ->selectRaw('customer_name, customer_email, COUNT(*) as order_count, SUM(total_amount) as total_spent')
             ->groupBy('customer_name', 'customer_email')
             ->orderByDesc('total_spent')
@@ -169,6 +187,7 @@ class ReportService
         $row = DB::table('orders')
             ->whereNull('deleted_at')
             ->whereBetween('created_at', [$from->startOfDay(), $to->copy()->endOfDay()])
+            ->when($this->tenantId, fn ($q) => $q->where('tenant_id', $this->tenantId))
             ->selectRaw(
                 'COUNT(*) as total_orders,
                  SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) as completed,
@@ -180,11 +199,11 @@ class ReportService
             ->first();
 
         return [
-            'total_orders'   => (int) ($row->total_orders ?? 0),
-            'completed'      => (int) ($row->completed ?? 0),
-            'cancelled'      => (int) ($row->cancelled ?? 0),
-            'revenue'        => (float) ($row->revenue ?? 0),
-            'avg_order_value'=> (float) ($row->avg_value ?? 0),
+            'total_orders'    => (int) ($row->total_orders ?? 0),
+            'completed'       => (int) ($row->completed ?? 0),
+            'cancelled'       => (int) ($row->cancelled ?? 0),
+            'revenue'         => (float) ($row->revenue ?? 0),
+            'avg_order_value' => (float) ($row->avg_value ?? 0),
         ];
     }
 
@@ -196,7 +215,8 @@ class ReportService
         $rows = DB::table('orders')
             ->whereNull('deleted_at')
             ->whereBetween('created_at', [$from->copy()->startOfDay(), $to->copy()->endOfDay()])
-            ->selectRaw($this->periodFormat('created_at', $format) . " as period, SUM(total_amount) as revenue, COUNT(*) as orders")
+            ->when($this->tenantId, fn ($q) => $q->where('tenant_id', $this->tenantId))
+            ->selectRaw($this->periodFormat('created_at', $format) . ' as period, SUM(total_amount) as revenue, COUNT(*) as orders')
             ->groupBy('period')
             ->orderBy('period')
             ->get();
@@ -215,6 +235,7 @@ class ReportService
             ->whereNull('orders.deleted_at')
             ->where('orders.status', 'completed')
             ->whereBetween('orders.created_at', [$from->startOfDay(), $to->copy()->endOfDay()])
+            ->when($this->tenantId, fn ($q) => $q->where('orders.tenant_id', $this->tenantId))
             ->selectRaw('order_items.product_name, SUM(order_items.quantity) as units, SUM(order_items.total_price) as revenue')
             ->groupBy('order_items.product_id', 'order_items.product_name')
             ->orderByDesc('revenue')
@@ -230,6 +251,7 @@ class ReportService
     {
         $row = DB::table('products')
             ->whereNull('deleted_at')
+            ->when($this->tenantId, fn ($q) => $q->where('tenant_id', $this->tenantId))
             ->selectRaw(
                 'COUNT(*) as total,
                  SUM(CASE WHEN stock_quantity <= 0 THEN 1 ELSE 0 END) as out_of_stock,
@@ -253,6 +275,7 @@ class ReportService
         return DB::table('products')
             ->leftJoin('categories', 'products.category_id', '=', 'categories.id')
             ->whereNull('products.deleted_at')
+            ->when($this->tenantId, fn ($q) => $q->where('products.tenant_id', $this->tenantId))
             ->selectRaw(
                 "COALESCE(categories.name, 'Uncategorised') as category,
                  COUNT(products.id) as product_count,
@@ -269,6 +292,7 @@ class ReportService
         return DB::table('products')
             ->leftJoin('categories', 'products.category_id', '=', 'categories.id')
             ->whereNull('products.deleted_at')
+            ->when($this->tenantId, fn ($q) => $q->where('products.tenant_id', $this->tenantId))
             ->where(function ($q): void {
                 $q->where('products.stock_quantity', '<=', 0)
                     ->orWhereRaw('products.min_stock_level > 0 AND products.stock_quantity <= products.min_stock_level');
@@ -293,6 +317,7 @@ class ReportService
             ->join('products', 'products.id', '=', 'inventory_movements.product_id')
             ->leftJoin('users', 'users.id', '=', 'inventory_movements.user_id')
             ->where('inventory_movements.created_at', '>=', now()->subDays($days))
+            ->when($this->tenantId, fn ($q) => $q->where('inventory_movements.tenant_id', $this->tenantId))
             ->select([
                 'inventory_movements.id',
                 'inventory_movements.type',
@@ -320,6 +345,7 @@ class ReportService
             ->whereNull('orders.deleted_at')
             ->whereBetween('orders.created_at', [$from->startOfDay(), $to->copy()->endOfDay()])
             ->join('order_items', 'orders.id', '=', 'order_items.order_id')
+            ->when($this->tenantId, fn ($q) => $q->where('orders.tenant_id', $this->tenantId))
             ->select([
                 'orders.order_number',
                 'orders.created_at',
@@ -368,6 +394,7 @@ class ReportService
         $rows = DB::table('products')
             ->leftJoin('categories', 'products.category_id', '=', 'categories.id')
             ->whereNull('products.deleted_at')
+            ->when($this->tenantId, fn ($q) => $q->where('products.tenant_id', $this->tenantId))
             ->select([
                 'products.sku',
                 'products.name',

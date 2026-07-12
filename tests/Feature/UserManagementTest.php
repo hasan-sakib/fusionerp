@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Models\Tenant;
 use App\Models\User;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Auth\Notifications\ResetPassword;
@@ -18,12 +19,16 @@ class UserManagementTest extends TestCase
     private User $admin;
     private User $manager;
     private User $employee;
+    private Tenant $tenant;
 
     protected function setUp(): void
     {
         parent::setUp();
 
         $this->seed(RolesAndPermissionsSeeder::class);
+
+        $this->tenant = Tenant::factory()->create(['slug' => 'test', 'status' => 'active']);
+        app()->instance('tenant', $this->tenant);
 
         $this->admin = User::factory()->create();
         $this->admin->assignRole('admin');
