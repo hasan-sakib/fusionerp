@@ -39,14 +39,6 @@ jobs:
       - name: Install Composer dependencies
         run: composer install --prefer-dist --no-interaction --no-progress
 
-      - name: Setup environment
-        run: |
-          cp .env.example .env
-          php artisan key:generate
-
-      - name: Run tests
-        run: php artisan test --no-coverage
-
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
@@ -58,6 +50,14 @@ jobs:
 
       - name: Build assets
         run: npm run build
+
+      - name: Setup environment
+        run: |
+          cp .env.example .env
+          php artisan key:generate
+
+      - name: Run tests
+        run: php artisan test --no-coverage
 
   # ─── Deploy ────────────────────────────────────────────────────────────────
   deploy:
