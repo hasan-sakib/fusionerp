@@ -1,16 +1,30 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Http\Controllers;
 
-use Illuminate\Http\Request;
+use App\Http\Requests\UpdateSettingRequest;
+use App\Services\SettingService;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\View\View;
 
 class SettingController extends Controller
 {
-    public function index()    { return view('coming-soon', ['title' => 'SettingController']); }
-    public function create()   { return view('coming-soon', ['title' => 'SettingController']); }
-    public function store()    { return back(); }
-    public function show($id)  { return view('coming-soon', ['title' => 'SettingController']); }
-    public function edit($id)  { return view('coming-soon', ['title' => 'SettingController']); }
-    public function update($id){ return back(); }
-    public function destroy($id){ return back(); }
+    public function __construct(private readonly SettingService $settings) {}
+
+    public function index(): View
+    {
+        return view('settings.index', [
+            'settings'  => $this->settings->all(),
+            'timezones' => timezone_identifiers_list(),
+        ]);
+    }
+
+    public function update(UpdateSettingRequest $request): RedirectResponse
+    {
+        $this->settings->update($request->validated());
+
+        return back()->with('success', 'Settings saved successfully.');
+    }
 }

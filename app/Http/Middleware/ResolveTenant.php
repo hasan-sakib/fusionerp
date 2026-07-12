@@ -23,7 +23,20 @@ class ResolveTenant
         $subdomain = count($parts) >= 2 ? $parts[0] : null;
 
         if ($subdomain === null || in_array($subdomain, ['www', 'admin'], true)) {
-            abort(404);
+            // In local dev without a subdomain, fall back to the first active tenant
+            if (! app()->isLocal()) {
+                abort(404);
+            }
+
+            $tenant = Tenant::where('status', 'active')->first();
+
+            if ($tenant === null) {
+                abort(404, 'No active tenant found for local development.');
+            }
+
+            app()->instance('tenant', $tenant);
+
+            return $next($request);
         }
 
         $tenant = Tenant::where('slug', $subdomain)->first();

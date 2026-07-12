@@ -122,7 +122,7 @@
                         <p class="truncate text-sm font-medium text-white">{{ auth()->user()->name }}</p>
                         <p class="truncate text-xs text-gray-400 capitalize">{{ auth()->user()->getRoleNames()->first() ?? 'user' }}</p>
                     </div>
-                    <x-dropdown align="right" width="48">
+                    <x-dropdown align="right" width="48" :dropUp="true">
                         <x-slot name="trigger">
                             <button class="text-gray-400 hover:text-white transition-colors">
                                 <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
