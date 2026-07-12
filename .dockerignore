@@ -1,0 +1,13 @@
+.git
+.github
+.dockerignore
+node_modules
+vendor
+docker-compose*.yml
+.env
+.env.*
+*.log
+.DS_Store
+tests
+storage/logs
+public/hot
