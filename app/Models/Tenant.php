@@ -50,6 +50,16 @@ class Tenant extends Model
         return $this->hasMany(InventoryMovement::class);
     }
 
+    public function subdomainUrl(): string
+    {
+        $base   = parse_url(config('app.url'));
+        $scheme = $base['scheme'] ?? 'http';
+        $host   = $base['host'] ?? 'localhost';
+        $port   = isset($base['port']) ? ':' . $base['port'] : '';
+
+        return "{$scheme}://{$this->slug}.{$host}{$port}";
+    }
+
     public static function current(): ?self
     {
         return app()->has('tenant') ? app('tenant') : null;

@@ -13,12 +13,14 @@ Route::get('/', function () {
 
 // ─── Platform Super-Admin Routes (no tenant context) ─────────────────────────
 Route::prefix('admin')->name('admin.')->middleware(['auth', 'platform.admin'])->group(function () {
-    Route::get('/', fn () => redirect()->route('admin.tenants.index'));
-    Route::resource('tenants', \App\Http\Controllers\Admin\TenantController::class);
+    Route::get('/', [\App\Http\Controllers\Admin\TenantController::class, 'dashboard'])->name('dashboard');
+    Route::post('/tenants/{id}/restore', [\App\Http\Controllers\Admin\TenantController::class, 'restore'])->name('tenants.restore');
+    Route::get('/tenants/{id}', [\App\Http\Controllers\Admin\TenantController::class, 'show'])->name('tenants.show');
+    Route::resource('tenants', \App\Http\Controllers\Admin\TenantController::class)->except(['show']);
 });
 
 // ─── Tenant-Scoped Authenticated Routes ──────────────────────────────────────
-Route::middleware(['tenant', 'tenant.active', 'auth', 'verified'])->group(function () {
+Route::middleware(['tenant', 'tenant.active', 'auth'])->group(function () {
 
     // Dashboard
     Route::get('/dashboard', DashboardController::class)->name('dashboard');

@@ -65,6 +65,8 @@ class RegisteredUserController extends Controller
 
         Auth::login($user);
 
+        session()->flash('subdomain_url', $tenant->subdomainUrl());
+
         return redirect()->route('dashboard');
     }
 }

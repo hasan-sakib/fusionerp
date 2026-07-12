@@ -2,6 +2,33 @@
     @section('title', 'Dashboard')
     @section('page-title', 'Dashboard')
 
+    {{-- ── Subdomain welcome flash ──────────────────────────────────────── --}}
+    @if (session('subdomain_url'))
+    <div class="mb-6 rounded-xl border border-indigo-200 bg-indigo-50 p-4">
+        <div class="flex items-start gap-3">
+            <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-indigo-100">
+                <svg class="h-5 w-5 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
+            </div>
+            <div>
+                <p class="text-sm font-semibold text-indigo-900">Your company ERP is ready!</p>
+                <p class="mt-0.5 text-sm text-indigo-700">
+                    Access it at:
+                    <a href="{{ session('subdomain_url') }}"
+                       class="font-mono font-medium underline hover:text-indigo-900">
+                        {{ session('subdomain_url') }}
+                    </a>
+                </p>
+                <p class="mt-1 text-xs text-indigo-600">
+                    Add <code class="rounded bg-indigo-100 px-1 font-mono">127.0.0.1&nbsp;{{ parse_url(session('subdomain_url'), PHP_URL_HOST) }}</code>
+                    to your <code class="rounded bg-indigo-100 px-1 font-mono">/etc/hosts</code> file to use the subdomain locally.
+                </p>
+            </div>
+        </div>
+    </div>
+    @endif
+
     {{-- ── KPI Cards ──────────────────────────────────────────────────────── --}}
     <div class="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
 
