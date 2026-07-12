@@ -1,19 +1,25 @@
 # FusionERP
 
-A production-ready Enterprise Resource Planning (ERP) system built with Laravel 12, featuring complete modules for user management, product & inventory control, order processing, and business intelligence reporting.
+A production-ready, multi-tenant Enterprise Resource Planning system built with Laravel 12. Each company gets its own isolated ERP instance accessed via subdomain. A platform super-admin dashboard manages all tenants from one place.
+
+![CI](https://github.com/hasan-sakib/fusionerp/actions/workflows/pipeline.yml/badge.svg)
 
 ---
 
 ## Table of Contents
 
 - [Project Overview](#project-overview)
-- [Objectives](#objectives)
 - [Tech Stack](#tech-stack)
-- [System Architecture](#system-architecture)
+- [Architecture](#architecture)
+  - [Multi-Tenancy](#multi-tenancy)
+  - [Application Layers](#application-layers)
+  - [Docker Topology](#docker-topology)
 - [Database Schema](#database-schema)
-- [Features & Modules](#features--modules)
+- [Modules](#modules)
 - [Role & Permission Matrix](#role--permission-matrix)
-- [Getting Started](#getting-started)
+- [CI / CD Pipeline](#ci--cd-pipeline)
+- [Getting Started — Local](#getting-started--local)
+- [Production Deployment](#production-deployment)
 - [Test Suite](#test-suite)
 - [Default Credentials](#default-credentials)
 
@@ -21,20 +27,15 @@ A production-ready Enterprise Resource Planning (ERP) system built with Laravel 
 
 ## Project Overview
 
-FusionERP is a full-featured web-based ERP system designed to manage the core operations of a small-to-medium business. It provides a unified platform for managing employees, products, stock levels, sales orders, and business performance — all behind a fine-grained role-based access control system.
+FusionERP is a full-featured web-based ERP designed for small-to-medium businesses. Companies register independently; each gets its own subdomain (e.g. `acme.localhost:8080`) and a fully isolated data environment on a shared database. A platform super-admin at `/admin` can oversee and manage all tenant companies from a single dashboard.
 
-The system is architected around strict module boundaries: each functional area (inventory, orders, reports) is self-contained with its own controller, service layer, policies, and tests. All stock-modifying operations run inside database transactions with row-level locking to guarantee consistency under concurrent load.
+**Core design principles:**
 
----
-
-## Objectives
-
-- Provide a single-pane-of-glass for operations: users, products, stock, orders, and reporting
-- Enforce business rules at the domain layer (services, enums, custom exceptions) — not just at the HTTP layer
-- Guarantee inventory integrity: every stock change is recorded as an immutable `InventoryMovement` audit record
-- Protect historical order data: product name, SKU, and price are snapshotted on each order line at creation time
-- Scale gracefully: all aggregate report queries use `selectRaw` with server-side grouping — no in-PHP collection processing
-- Ship with a comprehensive test suite that runs against a real SQLite in-memory database (no mocks)
+- Tenant isolation via `TenantScope` Eloquent global scope — cross-tenant data leaks are structurally impossible
+- Business rules enforced in the service layer (transactions, row-level locks, custom exceptions) — not just at the HTTP boundary
+- Inventory integrity: every stock change produces an immutable `InventoryMovement` audit record
+- Historical accuracy: product name, SKU, and price are snapshotted on each order line at creation
+- No mocks in tests — all 224 tests run against a real SQLite in-memory database
 
 ---
 
@@ -47,17 +48,34 @@ The system is architected around strict module boundaries: each functional area 
 | RBAC | Spatie Laravel Permission v6 |
 | Database | MySQL 8.0 (production) · SQLite :memory: (tests) |
 | Cache / Queue | Redis 7.4 |
-| Frontend | TailwindCSS 3 · Alpine.js 3 · Chart.js 4 |
+| Frontend | Tailwind CSS 3 · Alpine.js 3 · Chart.js 4 |
 | Build | Vite 7 |
 | Web Server | Nginx 1.27 |
 | PHP Runtime | PHP-FPM 8.4 Alpine |
 | Containerisation | Docker Compose |
+| CI / CD | GitHub Actions → Docker Hub → SSH deploy |
 
 ---
 
-## System Architecture
+## Architecture
 
-### Application Architecture
+### Multi-Tenancy
+
+FusionERP uses a **shared database, shared schema** multi-tenancy model with subdomain routing.
+
+```
+http://acme.localhost:8080   →  ResolveTenant middleware  →  binds Tenant('acme') into container
+http://beta.localhost:8080   →  ResolveTenant middleware  →  binds Tenant('beta') into container
+http://localhost:8080/admin  →  EnsurePlatformAdmin middleware  →  platform dashboard (no tenant)
+```
+
+Every tenant-scoped model uses the `BelongsToTenant` trait which:
+- Automatically applies `tenant_id = current_tenant` as a global Eloquent scope
+- Sets `tenant_id` from the container-bound tenant on `creating`
+
+`Gate::before()` grants admin users full access within their own tenant only.
+
+### Application Layers
 
 ```mermaid
 graph TB
@@ -65,167 +83,117 @@ graph TB
         UI["Blade + Alpine.js + Chart.js"]
     end
 
-    subgraph Nginx["Nginx 1.27 :8080"]
-        STATIC["Static assets<br/>(Vite build)"]
+    subgraph Nginx["Nginx 1.27"]
+        STATIC["Static assets (Vite build)"]
         PROXY["PHP-FPM proxy"]
     end
 
-    subgraph App["PHP-FPM 8.4 — fusion_app"]
+    subgraph App["PHP-FPM 8.4"]
         direction TB
-        ROUTES["routes/web.php"]
-        MW["Auth · Verified · can:* Middleware"]
+        MW["ResolveTenant · Auth · can:* Middleware"]
         CTRL["Controllers"]
-        SVC["Service Layer<br/>OrderService · DashboardService · ReportService"]
-        POLICY["Laravel Policies<br/>+ Gate::before() admin bypass"]
-        MODEL["Eloquent Models<br/>SoftDeletes · Enum casts"]
-        ENUM["Backed Enums<br/>OrderStatus"]
-        EX["Custom Exceptions<br/>InsufficientStockException"]
+        SVC["Service Layer\nOrderService · DashboardService\nReportService · SettingService"]
+        POLICY["Policies + Gate::before() admin bypass"]
+        MODEL["Eloquent Models\nBelongsToTenant · SoftDeletes · Enum casts"]
     end
 
     subgraph Storage["Data Layer"]
-        MYSQL["MySQL 8.0 :3306<br/>fusion_mysql"]
-        REDIS["Redis 7.4 :6379<br/>fusion_redis<br/>Sessions · Cache · Queues"]
+        MYSQL["MySQL 8.0"]
+        REDIS["Redis 7.4\nSessions · Cache · Queues"]
     end
 
-    subgraph Queue["Queue Worker — fusion_queue"]
-        WORKER["Laravel Queue Worker"]
-    end
-
-    UI -->|HTTPS| Nginx
+    UI --> Nginx
     Nginx --> STATIC
-    Nginx --> PROXY
-    PROXY --> ROUTES
-    ROUTES --> MW --> CTRL
+    Nginx --> PROXY --> MW --> CTRL
     CTRL --> POLICY
-    CTRL --> SVC
-    SVC --> MODEL
-    MODEL --> MYSQL
-    SVC --> ENUM
-    SVC --> EX
+    CTRL --> SVC --> MODEL --> MYSQL
     App --> REDIS
-    WORKER --> REDIS
-    WORKER --> MYSQL
 ```
 
-### Request Flow
-
-```mermaid
-sequenceDiagram
-    actor User
-    participant Nginx
-    participant Middleware
-    participant Controller
-    participant Policy
-    participant Service
-    participant DB
-
-    User->>Nginx: GET /orders/create
-    Nginx->>Middleware: auth + verified + can:orders.create
-    Middleware-->>User: 403 if denied
-    Middleware->>Controller: Authorised request
-    Controller->>Policy: authorize('create', Order::class)
-    Policy-->>Controller: Gate::before() bypasses for admin
-    Controller->>Service: createOrder(validated, user)
-    Service->>DB: BEGIN TRANSACTION
-    Service->>DB: SELECT ... FOR UPDATE (products)
-    Service->>DB: INSERT orders, order_items, inventory_movements
-    Service->>DB: COMMIT
-    Service-->>Controller: Order
-    Controller-->>User: Redirect with success flash
-```
-
-### Docker Compose Topology
+### Docker Topology
 
 ```mermaid
 graph LR
     subgraph Host
         P8080["localhost:8080"]
-        P5173["localhost:5173"]
         P3306["localhost:3306"]
         P6379["localhost:6379"]
     end
 
-    subgraph fusion_network["fusion_network (bridge)"]
-        NGINX["fusion_nginx<br/>Nginx 1.27"]
-        APP["fusion_app<br/>PHP-FPM 8.4"]
-        QUEUE["fusion_queue<br/>PHP-FPM 8.4<br/>queue:work"]
-        VITE["fusion_vite<br/>Node 22<br/>vite --host"]
-        MYSQL["fusion_mysql<br/>MySQL 8.0"]
-        REDIS["fusion_redis<br/>Redis 7.4"]
+    subgraph fusion_network
+        NGINX["fusion_nginx\nNginx 1.27"]
+        APP["fusion_app\nPHP-FPM 8.4"]
+        QUEUE["fusion_queue\nqueue:work"]
+        MYSQL["fusion_mysql\nMySQL 8.0"]
+        REDIS["fusion_redis\nRedis 7.4"]
     end
 
     P8080 --> NGINX
-    P5173 --> VITE
     P3306 --> MYSQL
     P6379 --> REDIS
-
-    NGINX -->|"proxy_pass 9000"| APP
-    APP --> MYSQL
-    APP --> REDIS
-    QUEUE --> MYSQL
-    QUEUE --> REDIS
+    NGINX -->|"9000"| APP
+    APP --> MYSQL & REDIS
+    QUEUE --> MYSQL & REDIS
 ```
 
 ---
 
 ## Database Schema
 
-### Entity Relationship Diagram
-
 ```mermaid
 erDiagram
-    users {
+    tenants {
         bigint id PK
         string name
-        string email UK
-        string phone
-        string department
-        string position
+        string slug UK
         enum status
-        timestamp email_verified_at
+        string plan
+        json settings
+        timestamp deleted_at
+    }
+
+    users {
+        bigint id PK
+        bigint tenant_id FK
+        string name
+        string email
+        enum status
+        boolean is_platform_admin
         timestamp last_login_at
         timestamp deleted_at
     }
 
     roles {
         bigint id PK
-        string name UK
-        string guard_name
-    }
-
-    permissions {
-        bigint id PK
-        string name UK
+        string name
         string guard_name
     }
 
     categories {
         bigint id PK
+        bigint tenant_id FK
         string name
-        string slug UK
-        text description
+        string slug
         boolean is_active
-        timestamp deleted_at
     }
 
     products {
         bigint id PK
+        bigint tenant_id FK
         bigint category_id FK
         string name
-        string slug UK
-        string sku UK
-        string barcode
+        string sku
         decimal price
         decimal cost
         int stock_quantity
         int min_stock_level
         enum status
-        boolean is_featured
         timestamp deleted_at
     }
 
     inventory_movements {
         bigint id PK
+        bigint tenant_id FK
         bigint product_id FK
         bigint user_id FK
         enum type
@@ -237,20 +205,14 @@ erDiagram
 
     orders {
         bigint id PK
-        string order_number UK
+        bigint tenant_id FK
+        string order_number
         bigint user_id FK
-        bigint cancelled_by_id FK
         string customer_name
-        string customer_email
-        string customer_phone
         enum status
         decimal subtotal
-        decimal tax_rate
         decimal tax_amount
-        decimal discount_amount
         decimal total_amount
-        text notes
-        timestamp cancelled_at
         timestamp deleted_at
     }
 
@@ -260,27 +222,28 @@ erDiagram
         bigint product_id FK
         string product_name "snapshot"
         string sku "snapshot"
-        int quantity
         decimal unit_price "snapshot"
+        int quantity
         decimal total_price
     }
 
+    tenants ||--o{ users : "has"
+    tenants ||--o{ categories : "owns"
+    tenants ||--o{ products : "owns"
+    tenants ||--o{ orders : "owns"
     users }o--o{ roles : "model_has_roles"
-    roles }o--o{ permissions : "role_has_permissions"
-    categories |o--o{ products : "classifies"
+    categories ||--o{ products : "classifies"
     products ||--o{ inventory_movements : "tracked by"
-    users ||--o{ inventory_movements : "performed by"
     users ||--o{ orders : "placed by"
-    users |o--o{ orders : "cancelled by"
     orders ||--|{ order_items : "contains"
-    products |o--o{ order_items : "referenced in"
+    products ||--o{ order_items : "referenced in"
 ```
 
 ### Order State Machine
 
 ```mermaid
 stateDiagram-v2
-    [*] --> Pending : Order created
+    [*] --> Pending : created
     Pending --> Confirmed : confirm
     Pending --> Cancelled : cancel
     Confirmed --> Processing : process
@@ -290,8 +253,24 @@ stateDiagram-v2
     Completed --> [*]
     Cancelled --> [*]
 
-    note right of Cancelled : Inventory auto-restored<br/>InventoryMovement(in) recorded
-    note right of Pending : Only editable state<br/>(items, pricing, customer)
+    note right of Cancelled : Inventory auto-restored
+    note right of Pending : Only editable state
 ```
 
 ---
+
+## Modules
+
+| # | Module | Key Features |
+|---|---|---|
+| 0 | **Auth** | Registration creates tenant + assigns admin role; email auto-verified; subdomain flashed on first login |
+| 1 | **Users** | CRUD, soft delete, restore, role assignment, password reset, per-tenant isolation |
+| 2 | **Roles & Permissions** | Custom roles with granular permissions; admin bypass via `Gate::before()` |
+| 3 | **Products** | CRUD with category, SKU, barcode, cost/price, status; soft delete & restore |
+| 4 | **Categories** | Hierarchical-ready categories with slugs; soft delete |
+| 5 | **Inventory** | Stock adjustments (in/out/correction), movement audit log, low-stock alerts |
+| 6 | **Orders** | Full order lifecycle, line-item snapshots, tax/discount, cancel with stock restore |
+| 7 | **Reports** | Sales report, inventory report, CSV export; server-side aggregation |
+| 8 | **Settings** | Per-tenant config (general, orders, preferences); stored in `tenants.settings` JSON column |
+| — | **Platform Admin** | Super-admin dashboard: all companies, stats, user lists, restore archived tenants |
+
